@@ -1,34 +1,46 @@
 const passport = require('passport')
-const GoogleStrategy = require('passport-google-oauth20').Strategy
+const LocalStrategy = require('passport-local').Strategy
+const passportJwt = require('passport-jwt')
+const JWTStrategy = passportJwt.Strategy
+const ExtractJwt = passportJwt.ExtractJwt
 const mongoose = require('mongoose')
 const keys = require('../config/keys')
 
 const User = mongoose.model('users')
 
-passport.serializeUser((user, done) => done(null, user.id))
-passport.deserializeUser((id, done) =>
-	User.findById(id).then((user) => done(null, user))
-)
-
 passport.use(
-	new GoogleStrategy(
+	new LocalStrategy(
 		{
-			clientID: keys.googleClientID,
-			clientSecret: keys.googleClientSecret,
-			callbackURL: '/auth/google/callback'
+			usernameField: 'email'
 		},
-		async (accessToken, refreshToken, profile, done) => {
-			const existingUser = await User.findOne({ googleID: profile.id })
-			if (existingUser) return done(null, existingUser)
+		(email, password, done) => {
+			User.findOne({ email }, (err, user) => {
+				if (err) return done(err)
+				if (!user)
+					return done(null, false, { message: 'Invalid username or password.' })
 
-			const newUser = await new User({
-				googleID: profile.id,
-				givenName: profile.name.givenName,
-				familyName: profile.name.familyName,
-				email: profile.emails[0].value
-			}).save()
+				user.verifyPassword(password, (err, isMatch) => {
+					if (err) return done(err)
+					if (!isMatch)
+						return done(null, false, {
+							message: 'Invalid username or password.'
+						})
 
-			done(null, newUser)
+					done(null, user)
+				})
+			})
 		}
 	)
 )
+
+passport.use(new JWTStrategy({
+	secretOrKey: process.env.JWT_KEY,
+	jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken()
+}, (jwtPayload, done) => {
+	User.findById(jwtPayload, (err, user) => {
+		if (err) return done(err)
+		if (!user) return done(null, false)
+
+		done(null, user)
+	})
+}))

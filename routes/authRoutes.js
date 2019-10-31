@@ -1,19 +1,11 @@
-const passport = require('passport')
- 
-module.exports = (app) => {
-  app.get('/auth/google', 
-    passport.authenticate('google', { scope: ['profile', 'email'] }))
+const express = require('express')
+const router = express.Router()
 
-  app.get('/auth/google/callback',
-    passport.authenticate('google'),
-    (req, res) => {
-      res.redirect('/')
-    })
-  
-  app.get('/logout', (req, res) => {
-    const user = req.user.givenName
+const Auth = require('../controller/authController')
 
-    req.logout()
-    res.send({ goodbye: user })
-  })
-}
+router.post('/register', Auth.register)
+router.get('/login', Auth.login)
+router.get('/logout', Auth.logout)
+router.get('user', ...Auth.user)
+
+module.exports = router

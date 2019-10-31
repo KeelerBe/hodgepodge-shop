@@ -1,39 +1,76 @@
 const mongoose = require('mongoose')
 const { Schema } = mongoose
+const bcrypt = require('bcrypt')
 
-const User = new Schema({
-  googleID: String,
-  givenName: String,
-  familyName: String,
-  email: String,
-  cartProducts: [{
-    type: Schema.Types.ObjectId,
-    ref: 'products'
-  }],
-  cartProductById: {
-    type: Schema.Types.Mixed,
-    default: {}
-  },
-  inventoryProducts: [{
-    type: Schema.Types.ObjectId,
-    ref: 'products'
-  }]
-}, { minimize: false })
+const userSchema = new Schema(
+	{
+		username: {
+			type: String,
+			required: true
+		},
+		email: {
+			type: String,
+      required: true,
+      unique: true
+    },
+    password: {
+      type: String,
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now()
+    },
+		cartProducts: [
+			{
+				type: Schema.Types.ObjectId,
+				ref: 'products'
+			}
+		],
+		cartProductById: {
+			type: Schema.Types.Mixed,
+			default: {}
+		},
+		inventoryProducts: [
+			{
+				type: Schema.Types.ObjectId,
+				ref: 'products'
+			}
+		]
+	},
+	{ minimize: false }
+)
 
-User.set('toObject', { virtuals: true })
-User.set('toJSON', { virtuals: true })
+userSchema.set('toObject', { virtuals: true })
+userSchema.set('toJSON', { virtuals: true })
 
-module.exports = mongoose.model('users', User)
-
-User.virtual('cartCount').get(function () {
-  return Object.values(this.cartProductById).reduce((total, productCount) => {
-    return total += productCount
-  }, 0)
+userSchema.pre('save', function(next) {
+  const user = this
+  bcrypt.hash(user.password, 10, function(err, hash) {
+    if (err) return next(err)
+    user.password = hash
+    next()
+  })
 })
 
-User.virtual('cartTotal').get(function () {
-  return this.cartProducts.reduce((total, product) => {
-    const productCount = this.cartProductById[product._id.toString()]
-    return total += product.price * productCount
-  }, 0)
+userSchema.methods.verifyPassword = function(inputPassword, cb) {
+  bcrypt.compare(inputPassword, this.password, function(err, isMatch) {
+    if (err) return cb(err)
+    cb(null, isMatch)
+  })
+}
+
+module.exports = mongoose.model('users', userSchema)
+
+userSchema.virtual('cartCount').get(function() {
+	return Object.values(this.cartProductById).reduce((total, productCount) => {
+		return (total += productCount)
+	}, 0)
+})
+
+userSchema.virtual('cartTotal').get(function() {
+	return this.cartProducts.reduce((total, product) => {
+		const productCount = this.cartProductById[product._id.toString()]
+		return (total += product.price * productCount)
+	}, 0)
 })
